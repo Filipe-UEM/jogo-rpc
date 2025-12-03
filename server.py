@@ -7,7 +7,7 @@ import uuid
 class JogoDaVelha:
     def __init__(self):
         self.tabuleiro = [[' ', ' ', ' '], [' ', ' ', ' '], [' ', ' ', ' ']]
-        self.jogadores = {}  # id_jogador -> {'simbolo': 'X/O', 'token': token}
+        self.jogadores = {}  # id_jogador = {'simbolo': 'X/O', 'token': token}
         self.jogadores_conectados = 0
         self.vez_de = None
         self.jogo_iniciado = False
@@ -18,8 +18,8 @@ class JogoDaVelha:
         self.jogo_ativo = True
         self.jogo_encerrado = False
         self.motivo_encerramento = ""
-        self.nicks_em_uso = set()  # Conjunto de nicks atualmente em uso
-        self.tokens_jogadores = {}  # Token único para cada jogador
+        self.nicks_em_uso = set()  # nicks atualmente em uso
+        self.tokens_jogadores = {}  # Token unico para cada jogador
 
     def verificar_inatividade(self):
         while self.jogo_ativo and not self.jogo_encerrado:

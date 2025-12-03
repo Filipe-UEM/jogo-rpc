@@ -47,7 +47,7 @@ id_jogador = sys.argv[3]
 try:
     proxy = xmlrpc.client.ServerProxy("http://" + ip_servidor + ":" + str(porta))
     
-    # Registra o jogador
+    # registra o jogador
     resultado = proxy.registrar_jogador(id_jogador)
     
     if resultado["status"] == "ERRO":
@@ -73,12 +73,12 @@ try:
         if len(jogadores) == 2:
             break
         
-        # Verifica se o jogo foi encerrado
+        # verifica se o jogo foi encerrado
         if proxy.verificar_jogo_encerrado():
             print("Jogo foi encerrado:", proxy.obter_motivo_encerramento())
             sys.exit()
             
-        # Verifica se o servidor ainda está ativo
+        # verifica se o servidor ainda esta ativo
         try:
             proxy.obter_tabuleiro()
         except:
@@ -87,7 +87,7 @@ try:
         
         time.sleep(1)
     
-    # Re-registra para pegar o símbolo correto
+    # re-registra para pegar o simbolo correto
     resultado = proxy.registrar_jogador(id_jogador)
     if resultado["status"] == "OK":
         simbolo = resultado["simbolo"]
@@ -98,7 +98,7 @@ try:
             outro_jogador = jogador_id
             break
     
-    # Mostra animação do sorteio
+    # mostra animacao do sorteio
     animacao_cara_coroa()
     
     print("Sorteio realizado! Você é:", simbolo)
@@ -113,7 +113,7 @@ try:
     time_ultima_verificacao = time.time()
     
     while True:
-        # Verifica se o jogo foi encerrado a cada 5 segundos
+        # verifica se o jogo foi encerrado a cada 5 segundos
         if time.time() - time_ultima_verificacao > 5:
             if proxy.verificar_jogo_encerrado():
                 print("Jogo encerrado:", proxy.obter_motivo_encerramento())
@@ -159,7 +159,7 @@ try:
             print("Vez de " + outro_jogador + "...")
             time.sleep(2)
         
-        # Verifica se o jogo terminou normalmente
+        # verifica se o jogo terminou normalmente
         tabuleiro = proxy.obter_tabuleiro()
         
         vencedor = None
