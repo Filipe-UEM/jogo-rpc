@@ -1,9 +1,12 @@
+# v1.2.0-cliente.py
+# Filipe Amadeu Santana RA: 123515
+# Rafael Nascimento de Angelis RA: 124164
+
 import xmlrpc.client
 import sys
 import time
 import os
-
-token_jogador = None
+import uuid
 
 def limpar_tela():
     os.system('cls' if os.name == 'nt' else 'clear')
@@ -36,6 +39,9 @@ def animacao_cara_coroa():
     time.sleep(1)
     limpar_tela()
 
+def gerar_token():
+    return str(uuid.uuid4())
+
 if len(sys.argv) != 4:
     print("Uso: python cliente.py ip_servidor porta id_jogador")
     sys.exit()
@@ -44,28 +50,24 @@ ip_servidor = sys.argv[1]
 porta = int(sys.argv[2])
 id_jogador = sys.argv[3]
 
+token_cliente = gerar_token()
+
 try:
     proxy = xmlrpc.client.ServerProxy("http://" + ip_servidor + ":" + str(porta))
     
-    # registra o jogador
-    resultado = proxy.registrar_jogador(id_jogador)
+    resultado = proxy.registrar_jogador_com_token(id_jogador, token_cliente)
     
-    if resultado["status"] == "ERRO":
-        if resultado["mensagem"] == "CHEIO":
-            print("Servidor cheio. Não foi possível conectar.")
-        elif resultado["mensagem"] == "ENCERRADO":
-            print("Jogo já foi encerrado. Não é possível conectar.")
-        elif resultado["mensagem"] == "NICK_EM_USO":
-            print("Este nick já está em uso por outro jogador. Escolha outro nick.")
-        elif resultado["mensagem"] == "JOGO_EM_ANDAMENTO":
-            print("Jogo já está em andamento. Aguarde a partida terminar.")
+    if resultado == "CHEIO":
+        print("Servidor cheio. Não foi possível conectar.")
+        sys.exit()
+    elif resultado == "ENCERRADO":
+        print("Jogo já foi encerrado. Não é possível conectar.")
+        sys.exit()
+    elif resultado == "NICK_EM_USO":
+        print("Este nickname já está em uso por outro jogador com token diferente.")
         sys.exit()
     
-    simbolo = resultado["simbolo"]
-    token_jogador = resultado["token"]
-    
-    print("Você está conectado como jogador", id_jogador)
-    print("Token de segurança:", token_jogador[:8] + "...")
+    print(f"Você está conectado como jogador {id_jogador} (Token: {token_cliente[:8]}...)")
     print("Aguardando outro jogador...")
     
     while True:
@@ -73,12 +75,10 @@ try:
         if len(jogadores) == 2:
             break
         
-        # verifica se o jogo foi encerrado
         if proxy.verificar_jogo_encerrado():
             print("Jogo foi encerrado:", proxy.obter_motivo_encerramento())
             sys.exit()
             
-        # verifica se o servidor ainda esta ativo
         try:
             proxy.obter_tabuleiro()
         except:
@@ -87,10 +87,7 @@ try:
         
         time.sleep(1)
     
-    # re-registra para pegar o simbolo correto
-    resultado = proxy.registrar_jogador(id_jogador)
-    if resultado["status"] == "OK":
-        simbolo = resultado["simbolo"]
+    simbolo = proxy.obter_simbolo_jogador(id_jogador, token_cliente)
     
     outro_jogador = None
     for jogador_id in jogadores:
@@ -98,7 +95,6 @@ try:
             outro_jogador = jogador_id
             break
     
-    # mostra animacao do sorteio
     animacao_cara_coroa()
     
     print("Sorteio realizado! Você é:", simbolo)
@@ -113,7 +109,7 @@ try:
     time_ultima_verificacao = time.time()
     
     while True:
-        # verifica se o jogo foi encerrado a cada 5 segundos
+        # Verifica se o jogo foi encerrado a cada 5 segundos
         if time.time() - time_ultima_verificacao > 5:
             if proxy.verificar_jogo_encerrado():
                 print("Jogo encerrado:", proxy.obter_motivo_encerramento())
@@ -135,16 +131,16 @@ try:
                 jogada = input("Digite sua jogada (ex: A1) ou 'sair' para sair: ").strip().upper()
                 
                 if jogada == 'SAIR':
-                    proxy.sair_jogo(id_jogador, token_jogador)
+                    proxy.sair_jogo_com_token(id_jogador, token_cliente)
                     print("Você saiu do jogo. O jogo foi encerrado para ambos os jogadores.")
                     sys.exit()
                 
                 if len(jogada) == 2 and jogada[0] in ['A','B','C'] and jogada[1] in ['1','2','3']:
-                    resultado = proxy.fazer_jogada(id_jogador, jogada, token_jogador)
+                    resultado = proxy.fazer_jogada_com_token(id_jogador, token_cliente, jogada)
                     if resultado["status"] == "ERRO":
                         print("Erro:", resultado["mensagem"])
-                        if "encerrado" in resultado["mensagem"].lower() or "token" in resultado["mensagem"].lower():
-                            print("Jogo encerrado ou acesso negado. Saindo...")
+                        if "encerrado" in resultado["mensagem"].lower():
+                            print("Jogo encerrado. Saindo...")
                             break
                     else:
                         jogada_ok = True
@@ -159,7 +155,6 @@ try:
             print("Vez de " + outro_jogador + "...")
             time.sleep(2)
         
-        # verifica se o jogo terminou normalmente
         tabuleiro = proxy.obter_tabuleiro()
         
         vencedor = None
@@ -207,7 +202,7 @@ try:
                     print("Não foi possível reiniciar o jogo. Alguém saiu.")
                     break
             else:
-                proxy.sair_jogo(id_jogador, token_jogador)
+                proxy.sair_jogo_com_token(id_jogador, token_cliente)
                 print("Você saiu do jogo. Obrigado por jogar!")
                 break
 
