@@ -1,206 +1,128 @@
-# Jogo da Velha (RPC / Sistema Distribuído)
+# Jogo da Velha Distribuído com RPC em Python
 
-## Visão geral
+Um jogo da velha multiplayer implementado com arquitetura cliente-servidor usando RPC (Remote Procedure Call) em Python. O servidor central gerencia o estado do jogo, enquanto os clientes se conectam remotamente para jogar.
 
-Este projeto implementa um Jogo da Velha multiplayer simples usando **XML-RPC** para comunicação entre cliente e servidor.
-O servidor mantém todo o estado do jogo (tabuleiro, jogadores, vez e estatísticas), enquanto o cliente se conecta remotamente e realiza jogadas através de chamadas RPC.
+## Visão Geral
 
----
+Este projeto implementa um jogo da velha distribuído onde:
 
-## Arquivos principais
+- O servidor atua como autoridade central.
+- Os clientes não compartilham estado diretamente.
+- Toda comunicação é feita via chamadas RPC.
 
-- **server.py** — Implementação do servidor XML-RPC responsável pela lógica do jogo, validação, sincronização e controle do estado.
-- **cliente.py** — Cliente que se conecta ao servidor, registra o jogador, exibe o tabuleiro e controla a interação.
+## Arquitetura
 
----
+- **Cliente-Servidor**: Arquitetura centralizada com servidor como ponto único de verdade.
+- **Comunicação**: RPC via XML sobre HTTP.
+- **Bibliotecas**: `xmlrpc.server.SimpleXMLRPCServer` (servidor) e `xmlrpc.client.ServerProxy` (cliente).
 
-## Modelo de Comunicação
+## Funcionamento do RPC
 
-### 1. Protocolo
+### No Cliente:
 
-A comunicação utiliza **XML-RPC sobre HTTP**, empregando:
+```python
+proxy = xmlrpc.client.ServerProxy("http://" + ip_servidor + ":" + str(porta))
+resultado = proxy.registrar_jogador(id_jogador)
+```
 
-- `xmlrpc.server.SimpleXMLRPCServer` no servidor
-- `xmlrpc.client.ServerProxy` no cliente
+### No Servidor:
 
-### 2. RPCs expostas pelo servidor
+```python
+server = xmlrpc.server.SimpleXMLRPCServer(("0.0.0.0", porta))
+server.register_instance(JogoDaVelha())
+server.serve_forever()
+```
 
-O servidor disponibiliza métodos que podem ser chamados remotamente:
+## Comunicação
 
-- `registrar_jogador(id_jogador)`
-- `obter_jogadores()`
+Cada interação do jogador é uma requisição RPC ao servidor. Exemplos de métodos disponíveis:
+
+- `registrar_jogador()`
+- `fazer_jogada()`
 - `obter_tabuleiro()`
 - `obter_vez()`
-- `fazer_jogada(id_jogador, jogada)`
-- `reiniciar_jogo()`
-- `sair_jogo(id_jogador)`
-- `verificar_jogo_encerrado()`
-- `obter_motivo_encerramento()`
-- `obter_estatisticas()`
 
-### 3. Comunicação pelo cliente
+Padrão **request-response**: cada chamada bloqueia até receber resposta.
 
-O cliente cria um `ServerProxy("http://<IP>:<PORTA>")` e então:
+## Controle de Concorrência
 
-- Registra o jogador
-- Realiza _polling_ com `time.sleep` para verificar:
+O servidor utiliza **exclusão mútua** (`threading.Lock`) para proteger o estado compartilhado:
 
-  - vez atual
-  - alterações no tabuleiro
-  - estado de encerramento
+```python
+self.lock = threading.Lock()
 
-- Envia jogadas usando `fazer_jogada()`
-
----
-
-## Trechos responsáveis (Mapa rápido)
-
-### **Servidor**
-
-- Inicialização RPC:
-  `SimpleXMLRPCServer(("0.0.0.0", porta))`
-- Registro da instância:
-  `server.register_instance(JogoDaVelha())`
-- Controle de concorrência:
-  `threading.Lock()` com `with self.lock:`
-- Controle de inatividade (thread daemon):
-  Encerramento automático após 45s sem jogadas.
-
-### **Cliente**
-
-- Conexão RPC:
-  `ServerProxy(f"http://{ip}:{porta}")`
-- Polling:
-  Loops utilizando `obter_jogadores()`, `obter_tabuleiro()`, `obter_vez()` e `verificar_jogo_encerrado()`.
-
----
-
-## Comportamento de espera e sincronização
-
-### **Cliente — Polling**
-
-- Atualiza estado do jogo com intervalos entre 1–5s.
-- Simples de implementar, porém gera tráfego contínuo.
-
-### **Servidor — Sincronização**
-
-- O uso de `Lock` garante que apenas uma thread modifica o tabuleiro por vez, evitando condições de corrida.
-
----
-
-## Pontos importantes (Considerações para Sistema Distribuído)
-
-1. **Single Point of Failure**
-   Se o servidor cair, todo o jogo é perdido.
-2. **Escalabilidade**
-   XML-RPC + polling não escalam para grande quantidade de jogos simultâneos.
-3. **Segurança**
-   Não há autenticação e o tráfego é HTTP simples.
-4. **Timeouts / falhas de cliente**
-   Servidor verifica inatividade e encerra automaticamente.
-5. **Idempotência**
-   Chamadas duplicadas de registro são tratadas corretamente.
-
----
-
-## Como executar
-
-### 1. Iniciar o servidor
-
-```bash
-python server.py
+with self.lock:
+    # operações críticas
 ```
 
-### 2. Iniciar o cliente em outra máquina ou terminal
+Isso previne condições de corrida e garante:
 
-```bash
-python cliente.py <IP_DO_SERVIDOR> 8000 <ID_DO_JOGADOR>
+- Jogadas não simultâneas.
+- Controle preciso de turnos.
+- Consistência do tabuleiro.
+
+## Monitoramento de Inatividade
+
+Uma thread _daemon_ monitora o tempo desde a última jogada:
+
+```python
+threading.Thread(target=self.verificar_inatividade, daemon=True).start()
 ```
 
-Exemplo:
+Se um jogador ficar inativo por **45 segundos**, o jogo é encerrado automaticamente.
 
-```bash
-python cliente.py 192.168.0.10 8000 jogadorA
+## Tolerância a Falhas
+
+O sistema lida com:
+
+- **Inatividade do jogador**: timeout automático.
+- **Desconexão do cliente**: tratamento de exceções no cliente.
+- **Saída explícita**: comando `sair` para encerramento limpo.
+
+Exemplo no cliente:
+
+```python
+except Exception as e:
+    print("Erro de conexão:", e)
 ```
 
-### 3. Iniciar um segundo cliente
+## Consistência do Estado
 
-```bash
-python cliente.py 192.168.0.10 8000 jogadorB
-```
+O servidor mantém um estado centralizado e consistente, incluindo:
 
----
+- Tabuleiro atual.
+- Símbolos (X/O).
+- Controle de turno.
+- Status de vitória/empate.
 
-## Como permitir que OUTRAS máquinas acessem o servidor (Configurar Firewall do Windows)
+O cliente nunca modifica o estado diretamente, apenas solicita atualizações via `proxy.obter_tabuleiro()`.
 
-Para que o servidor seja acessível na rede local (LAN), você precisa liberar a porta do servidor (por padrão, **8000**).
+## Autenticação e Controle de Acesso
 
-### **Passo a passo (Firewall do Windows)**
+- Tokens únicos são gerados com `uuid` para cada jogador.
+- Cada token é vinculado a um jogador.
+- Operações sensíveis exigem validação do token.
 
-### 🔹 1. Abrir o Firewall do Windows
+Isso garante que:
 
-- Pressione **Windows + R**
-- Digite: `wf.msc`
-- Pressione **Enter**
+- Um jogador não possa impersonar outro.
+- Conexões repetidas sejam bloqueadas.
+- Nicks duplicados não interfiram no jogo.
 
-### 🔹 2. Criar uma regra de entrada
+## Como Executar
 
-1. No menu à esquerda, clique em **Regras de Entrada**
-2. No menu à direita, clique em **Nova Regra**
-3. Escolha **Porta** → Avançar
-4. Selecione **TCP**
-5. Em **Portas locais específicas**, coloque:
+1. Inicie o servidor em uma máquina acessível:
 
-   ```
-   8000
+   ```bash
+   python servidor.py
    ```
 
-6. Avançar
-7. Selecione **Permitir a conexão**
-8. Avançar
-9. Marque as três opções:
-   ✔ Domínio
-   ✔ Privado
-   ✔ Público
-10. Avançar
-11. Nome da regra:
+2. Os clientes conectam-se via:
 
-    ```
-    jogo-da-velha-rpc
-    ```
+   ```bash
+   python cliente.py <ip_servidor> <porta>
+   ```
 
-12. Concluir
-
-### 🔹 3. Confirmar que a porta abriu
-
-Execute no terminal:
-
-```bash
-netstat -an | find "8000"
-```
-
-Você deve ver algo como:
-
-```
-TCP    0.0.0.0:8000    LISTENING
-```
-
-### 🔹 4. Descobrir seu IP para enviar aos jogadores
-
-```bash
-ipconfig
-```
-
-Anotar o IPv4, por exemplo:
-
-```
-IPv4: 192.168.0.10
-```
-
-Esse é o IP usado pelos clientes:
-
-```bash
-python cliente.py 192.168.0.10 8000 jogador1
-```
+3. Use um IP público e porta aberta para jogar entre redes diferentes.
 
 ---

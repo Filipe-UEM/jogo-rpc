@@ -275,6 +275,6 @@ class JogoDaVelha:
 porta = 8000
 server = xmlrpc.server.SimpleXMLRPCServer(("0.0.0.0", porta))
 server.register_instance(JogoDaVelha())
-print("Servidor do Jogo da Velha (v2.0 com tokens) iniciado na porta", porta)
+print("Servidor do jogo iniciado na porta", porta)
 print("Para conectar de outra rede, use seu IP público e porta", porta)
 server.serve_forever()
